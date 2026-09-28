@@ -18,4 +18,4 @@ O motor ONNX e o tokenizador do projeto de origem foram preservados. O gerenciam
 
 Nenhum peso proprietário, API, identidade comercial ou código interno da TypeSafe foi copiado. OZY não é o modelo JEV da TypeSafe. É um classificador por exemplos com embeddings pré-treinados, não um LLM novo treinado do zero.
 
-O repositório original não contém uma licença de código na raiz. Esta extração foi solicitada pelo proprietário; nenhuma licença adicional foi presumida. Repositório público não concede automaticamente licença de redistribuição. O modelo de terceiros mantém sua própria licença (MIT, conforme manifesto de origem). Pesos não são incluídos no git.
+O repositório original não contém uma licença de código na raiz. Esta extração foi solicitada pelo proprietário, que em 28/09/2026 escolheu distribuir o código do OZY sob a Apache License 2.0 (`LICENSE`), a mesma do Laya, que o OZY pode usar como motor. O modelo de terceiros mantém sua própria licença (MIT, conforme manifesto de origem). Pesos não são incluídos no git.

@@ -118,4 +118,6 @@ Você pode depois reunir decisões corrigidas em JSONL, avaliar o conjunto e des
 
 Testes com vetores controlados não demonstram precisão semântica no PC. Os limiares herdados precisam ser calibrados com seus casos reais antes de aumentar a autonomia. O motor/tokenizador veio do OSONE; a seleção de alvos não substitui observar novamente uma interface que mudou.
 
-Público no GitHub; nenhuma nova licença de redistribuição foi atribuída ao código nesta extração. Consulte [a origem e os termos dos componentes](docs/ORIGIN.md).
+## Licença
+
+O código do OZY é distribuído sob a [Apache License 2.0](LICENSE) — a mesma do Laya. O modelo `multilingual-e5-small` mantém a licença dele (MIT) e os pesos não estão no git. Consulte [a origem dos componentes](docs/ORIGIN.md).

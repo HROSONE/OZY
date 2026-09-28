@@ -4,6 +4,7 @@
   "description": "Decisor local para agentes de PC, derivado do núcleo JEV local do OSONE.",
   "type": "module",
   "private": true,
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=22"
   },

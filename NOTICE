@@ -1,0 +1,8 @@
+OZY
+Copyright 2026 HROSONE
+
+Este produto inclui código derivado do JEV local do OSONE (HROSONE/OSONE-AI-code),
+distribuído aqui sob a Apache License 2.0 por decisão do proprietário.
+
+O modelo Xenova/multilingual-e5-small, baixado sob demanda e não incluído no git,
+mantém a própria licença (MIT).
