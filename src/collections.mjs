@@ -11,7 +11,6 @@ export const EXEMPLOS_DAS_FAMILIAS                           = {
   nenhuma: ['resume esse texto', 'e aí, tudo bem?', 'obrigado!', 'me explica o que é inflação', 'escreve um poema sobre o mar', 'traduz isso pro inglês', 'qual a diferença entre ser e estar?', 'kkkkk verdade']
 };
 
-
 export const EXEMPLOS_DE_RISCO                           = {
   irreversivel: [
     'botão Encerrar conta', 'Esvaziar lixeira', 'Desativar minha conta', 'Descartar alterações', 'Zerar tudo',

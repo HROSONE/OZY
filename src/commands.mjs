@@ -1,13 +1,9 @@
 // OZY: propostas, nunca relatos de ações já executadas.
-                           
-                                                      
-                                                                                     
-                                                                                     
 
-const normalizar = (t        ) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+const normalizar = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
 
 /** Vocativo e cortesia no começo e no fim não mudam o comando. É também o texto que se aprende. */
-export const limpar = (t        ) => normalizar(t)
+export const limpar = (t) => normalizar(t)
   .replace(/^(?:(?:ei|oi|ola|ozy|osone|jarvis)[,!\s]+)+/, '')
   .replace(/^(?:por favor|pf|pfv)[,\s]+/, '')
   .replace(/[,\s]+(?:por favor|pf|pfv|pra mim|para mim)$/, '')
@@ -22,7 +18,7 @@ const ABRIR = /^(?:abre|abra|abrir|abri|inicia|inicie|iniciar|executa|execute|ex
 /**
  * O formato, só pela regra. É o "código propõe": sem regra que case, nem se pergunta ao decisor.
  */
-export function candidatoAComando(mensagem        )                       {
+export function candidatoAComando(mensagem) {
   const t = limpar(mensagem);
   if (!t || t.split(' ').length > 8 || COMPOSTO.test(t)) return null;
 
