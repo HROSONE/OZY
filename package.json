@@ -1,0 +1,29 @@
+{
+  "name": "@hrosone/ozy",
+  "version": "0.1.0",
+  "description": "Decisor local para agentes de PC, derivado do núcleo JEV local do OSONE.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.mjs",
+    "./runtime": "./src/runtime/adapter.mjs"
+  },
+  "bin": {
+    "ozy": "./src/cli.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node scripts-check.mjs",
+    "start": "node src/cli.mjs",
+    "model:download": "node src/cli.mjs download",
+    "smoke:model": "node src/cli.mjs smoke",
+    "calibrate": "node src/cli.mjs calibrate",
+    "validate:real": "node scripts/validate-real.mjs"
+  },
+  "optionalDependencies": {
+    "onnxruntime-node": "1.30.0"
+  }
+}

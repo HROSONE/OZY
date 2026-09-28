@@ -1,0 +1,8 @@
+node_modules/
+.ozy-models/
+.env*
+*.onnx
+*.part
+data/*.jsonl
+!data/example.jsonl
+coverage/
