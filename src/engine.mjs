@@ -3,20 +3,32 @@ import { PERGUNTAS_DO_TURNO, LIMIAR } from './questions.mjs';
 import { candidatoAComando, EXEMPLOS_DO_COMANDO, limpar } from './commands.mjs';
 import { EXEMPLOS_DAS_FAMILIAS, EXEMPLOS_DE_RISCO } from './collections.mjs';
 import { candidatosPara, escolhaExata, descreverElemento } from './elements.mjs';
+import { assinatura, normalizarResposta, validarPerguntas } from './typed.mjs';
 
 const normalize = text => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
-const riskPattern = /\b(apagar|pague|pagamento|pagamentos|exclu\w*|delet\w*|envi\w*|pagar|pague|pagamento|pagamentos|compr\w*|pix|transfer\w*|public\w*|encerrar|esvaziar|desativar|descartar|zerar|revogar|cancelar|restaurar|resetar|quitar|formatar|assinar|contratar|delete|remove|pay|purchase|send|submit)\b/;
+const riskPattern = /\b(apagar|pague|pagamento|pagamentos|exclu\w*|delet\w*|envi\w*|pagar|compr\w*|pix|transfer\w*|public\w*|encerrar|esvaziar|desativar|descartar|zerar|revogar|cancelar|restaurar|resetar|quitar|formatar|assinar|contratar|delete|remove|pay|purchase|send|submit)\b/;
 const abstain = reason => ({ status: 'abstain', reason });
 const validVectors = (vectors, count) => Array.isArray(vectors) && vectors.length === count && count > 0 && vectors.every(v => Array.isArray(v) && v.length === vectors[0].length && v.length > 0 && v.every(Number.isFinite) && v.some(n => n !== 0));
 
 /** Scores are vote shares / cosine similarities, NOT calibrated probabilities. */
 export class OZY {
   #embed; #collections = new Map(); #cache = new Map(); #dimension;
-  constructor({ embed, timeoutMs = 1500, maxCache = 1500 } = {}) {
+  #backend; #backendTimeoutMs; #onDecision; #answerCorrections = new Map();
+  /**
+   * `backend`: motor opcional (`createLayaBackend`, `createJevBackend`) para `evaluate`. Sem ele,
+   * `evaluate` responde só o que o voto local sabe e se abstém do resto.
+   * `onDecision`: chamado a cada resposta de `evaluate` — para o hospedeiro mostrar o que foi
+   * decidido, por quem e em quanto tempo. Um erro nele nunca derruba a decisão.
+   */
+  constructor({ embed, timeoutMs = 1500, maxCache = 1500, backend, backendTimeoutMs = 3000, onDecision } = {}) {
     if (typeof embed !== 'function') throw new TypeError('Forneça embed(textos, tipo, prazoMs).');
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new TypeError('timeoutMs inválido');
     if (!Number.isInteger(maxCache) || maxCache < 1) throw new TypeError('maxCache inválido');
+    if (backend !== undefined && (!backend || typeof backend.predict !== 'function')) throw new TypeError('backend precisa de predict(state, questions).');
+    if (!Number.isFinite(backendTimeoutMs) || backendTimeoutMs <= 0) throw new TypeError('backendTimeoutMs inválido');
+    if (onDecision !== undefined && typeof onDecision !== 'function') throw new TypeError('onDecision deve ser função.');
     this.#embed = embed; this.timeoutMs = timeoutMs; this.maxCache = maxCache;
+    this.#backend = backend; this.#backendTimeoutMs = backendTimeoutMs; this.#onDecision = onDecision;
   }
   async #vectors(texts, kind, timeoutMs) {
     if (!texts.length || texts.some(t => typeof t !== 'string' || !t.trim())) return null;
@@ -157,5 +169,135 @@ export class OZY {
     }
     if (!selected) return abstain('Nenhum alvo.');
     return { status:'decided', selector:selected.seletor, name:selected.nome, source:exact?'name':'semantic', risk:await this.risk(selected.nome), executed:false };
+  }
+
+  /**
+   * Perguntas tipadas no formato do Jev/Laya (`typed.mjs`), respondidas nesta ordem:
+   *
+   *   1. CORREÇÃO: a mesma pergunta já corrigida para este estado (texto igual ou cosseno ≥ .97)
+   *      decide antes de qualquer modelo. É o que nem o Jev nem o Laya fazem: aprender na hora.
+   *   2. MOTOR (`backend`), se houver: uma chamada para todas as perguntas restantes, com prazo.
+   *      Resposta fora do que foi perguntado é descartada; abaixo de `minConfidence`, abstém.
+   *   3. VOTO LOCAL: `choice` pela semelhança do estado com as opções (com folga, senão abstém);
+   *      `noul`/`score`/`choice` pela coleção indicada em `question.collection`. Sem nada disso,
+   *      abstém — o voto local não inventa resposta para pergunta que não conhece.
+   *
+   * Nunca lança por falha de modelo; lança TypeError para pergunta malformada.
+   */
+  async evaluate(state, questions, { minConfidence, signal } = {}) {
+    const ids = validarPerguntas(questions);
+    const texto = typeof state === 'string' ? state.trim() : JSON.stringify(state ?? '');
+    if (!texto) throw new TypeError('state vazio.');
+    if (minConfidence !== undefined && (!Number.isFinite(minConfidence) || minConfidence < 0 || minConfidence > 1)) throw new TypeError('minConfidence deve estar entre 0 e 1.');
+    const answers = {};
+    const inicio = Date.now();
+    const anotar = (id, resposta) => {
+      answers[id] = resposta;
+      try { this.#onDecision?.({ question: id, instructions: questions[id].instructions, ...resposta, ms: Date.now() - inicio }); } catch { /* o painel não derruba a decisão */ }
+    };
+
+    // 1) Correções.
+    for (const id of ids) {
+      const corrigida = await this.#answerCorrection(questions[id], texto);
+      if (corrigida) anotar(id, corrigida);
+    }
+
+    // 2) Motor.
+    const restantes = ids.filter(id => !answers[id]);
+    let avisoDoMotor;
+    if (restantes.length && this.#backend && !signal?.aborted) {
+      const controle = new AbortController();
+      const repassar = () => controle.abort();
+      signal?.addEventListener('abort', repassar, { once: true });
+      let relogio;
+      try {
+        const bruto = await Promise.race([
+          Promise.resolve().then(() => this.#backend.predict(state, Object.fromEntries(restantes.map(id => [id, questions[id]])), { signal: controle.signal })),
+          new Promise((_, rejeitar) => { relogio = setTimeout(() => rejeitar(new Error(`${this.#backend.name || 'motor'} passou de ${this.#backendTimeoutMs} ms`)), this.#backendTimeoutMs); })
+        ]);
+        for (const id of restantes) {
+          const r = normalizarResposta(questions[id], bruto?.answers?.[id], this.#backend.name || 'backend', { escalaDoScore: this.#backend.escalaDoScore });
+          if (!r) continue;
+          if (minConfidence !== undefined && (r.confidence ?? 0) < minConfidence) {
+            anotar(id, { status: 'abstain', type: questions[id].type, reason: `Confiança ${(r.confidence ?? 0).toFixed(2)} abaixo de ${minConfidence}.`, source: r.source, low_confidence: true });
+          } else anotar(id, r);
+        }
+      } catch (erro) {
+        avisoDoMotor = String(erro?.message || erro);
+        controle.abort();
+      } finally {
+        clearTimeout(relogio);
+        signal?.removeEventListener('abort', repassar);
+      }
+    }
+
+    // 3) Voto local.
+    for (const id of ids.filter(id => !answers[id])) anotar(id, await this.#localAnswer(questions[id], texto, avisoDoMotor));
+    return { answers, ...(avisoDoMotor ? { backendError: avisoDoMotor } : {}) };
+  }
+
+  /**
+   * A pessoa corrigiu a resposta de uma pergunta para este estado. Vale para a MESMA pergunta
+   * (tipo, instruções e opções) e para estados iguais ou quase idênticos; até 40 por pergunta.
+   */
+  async correctAnswer(state, question, answer) {
+    validarPerguntas({ q: question });
+    const texto = (typeof state === 'string' ? state : JSON.stringify(state ?? '')).replace(/\s+/g, ' ').trim().slice(0, 1000);
+    if (!texto) throw new TypeError('state vazio.');
+    const certa = normalizarResposta(question, answer, 'correction');
+    if (!certa) throw new TypeError('Resposta incompatível com a pergunta.');
+    const vetor = (await this.#vectors([texto], 'passage', this.timeoutMs))?.[0];
+    const chave = assinatura(question);
+    const lista = (this.#answerCorrections.get(chave) || []).filter(c => c.text !== texto);
+    lista.push({ text: texto, answer: certa, vector: vetor });
+    this.#answerCorrections.set(chave, lista.slice(-40));
+    return { status: 'ready', indexed: !!vetor };
+  }
+
+  exportAnswerCorrections() {
+    return [...this.#answerCorrections].flatMap(([chave, lista]) => lista.map(({ text, answer }) => {
+      const [type, instructions] = chave.split('\0');
+      return { type, instructions, text, answer: { ...answer, source: undefined } };
+    }));
+  }
+
+  async #answerCorrection(q, texto) {
+    const lista = this.#answerCorrections.get(assinatura(q));
+    if (!lista?.length) return null;
+    const alvo = texto.replace(/\s+/g, ' ').trim().slice(0, 1000);
+    const igual = lista.findLast(c => c.text === alvo || normalize(c.text) === normalize(alvo));
+    if (igual) return { ...igual.answer, source: 'correction' };
+    const comVetor = lista.filter(c => c.vector);
+    if (!comVetor.length) return null;
+    const v = (await this.#vectors([alvo], 'passage', this.timeoutMs))?.[0];
+    if (!v) return null;
+    const melhor = comVetor.map(c => ({ c, s: cosseno(v, c.vector) })).sort((a, b) => b.s - a.s)[0];
+    return melhor.s >= .97 ? { ...melhor.c.answer, source: 'correction' } : null;
+  }
+
+  async #localAnswer(q, texto, avisoDoMotor) {
+    const nada = reason => ({ status: 'abstain', type: q.type, reason: avisoDoMotor ? `${reason} (motor: ${avisoDoMotor})` : reason, source: 'local' });
+    if (q.collection) {
+      const data = this.#collections.get(q.collection);
+      if (!data) return nada(`Coleção "${q.collection}" não preparada.`);
+      const r = await this.classify(q.collection, texto, { majority: .6 });
+      if (q.type === 'noul') {
+        if (!data.labels.has('sim') || !data.labels.has('nao')) return nada('Para noul, a coleção precisa dos rótulos sim e nao.');
+        if (!r.votes) return nada(r.reason || 'Sem voto.');
+        const total = Object.values(r.votes).reduce((a, b) => a + b, 0);
+        const noul = total ? (r.votes.sim || 0) / total : 0;
+        return { status: 'decided', type: 'noul', noul, confidence: Math.max(noul, 1 - noul), source: 'local' };
+      }
+      if (r.status !== 'decided') return nada(r.reason || 'Sem maioria.');
+      const resposta = q.type === 'choice' ? { choice: r.label } : { score: Number(r.label) };
+      return normalizarResposta(q, { ...resposta, confidence: r.score }, 'local') || nada(`O rótulo "${r.label}" não é resposta válida para esta pergunta.`);
+    }
+    if (q.type === 'choice') {
+      const opcoes = Object.entries(q.criteria).map(([id, descricao]) => ({ id, text: `${id}: ${descricao}` }));
+      const r = await this.select(texto.slice(0, 1000), opcoes);
+      if (r.status !== 'decided') return nada(r.reason || 'Sem escolha clara.');
+      return { status: 'decided', type: 'choice', choice: r.id, confidence: undefined, similarity: r.score, margin: r.margin, source: 'local' };
+    }
+    return nada('Sem motor (Laya/Jev) e sem coleção: o voto local não responde pergunta aberta.');
   }
 }

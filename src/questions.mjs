@@ -1,12 +1,4 @@
-                              
-                                                           
-                     
-                                                                                            
-                        
-                                                                                          
-                        
-  
-
+                                                               
 
 const CONVERSA = [
   'oi, tudo bem?',
@@ -81,12 +73,6 @@ export const PERGUNTAS_DO_TURNO = {
     exemplosNao: [...CONVERSA, 'quanto está o dólar hoje?', 'o que você acha dessa ideia?']
   }
 }                                         ;
-
-                                                             
-
-
-                                                                         
-
 
 export const LIMIAR = { programacao: 0.6, pesquisa: 0.6, acao: 0.35 }         ;
 

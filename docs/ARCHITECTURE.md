@@ -19,6 +19,10 @@
 - `select(description, candidates)`: id dos candidatos, piso .8 e margem .03; empate abstém.
 - `selectElement(description, 'clicar' | 'digitar', elements)`: devolve seletor proposto e revisão de risco. Nenhum clique é feito.
 - `risk(description)`: `review` ou `low-risk`, nunca autorização.
+- `evaluate(state, questions, { minConfidence, signal })`: perguntas `noul`/`choice`/`score` no formato Jev/Laya (`src/typed.mjs`). Ordem: correção → `backend` → voto local. Nunca lança por falha de modelo (`backendError` explica); lança `TypeError` para pergunta malformada.
+- `correctAnswer(state, question, answer)`: correção da resposta de uma pergunta tipada; vale para a mesma pergunta (tipo, instruções, opções) e estado igual ou com cosseno ≥ .97; até 40 por pergunta. `exportAnswerCorrections()` devolve os dados.
+- `backend`: `createLayaBackend({ modelDir | agent })` (no PC, via `laya-ts`, carregado na primeira chamada) ou `createJevBackend({ apiKey })` (nuvem). Contrato: `predict(state, questions, { signal })` devolvendo `{ answers }` cru; o OZY normaliza (`score` em base 0, nível mais provável em `level`) e descarta o que não bate com a pergunta.
+- `onDecision(d)`: chamado a cada resposta de `evaluate`, com `question`, `source` e `ms`; erro nele não derruba a decisão.
 
 `runAgent` exige `observe`, `propose`, `authorize`, `execute`, `verify`. O limite padrão é 10 etapas; resultados do executor precisam de `ok: true`. Permissão exige o booleano `true`, e cópias dos objetos evitam que o autorizador mude silenciosamente a ação. Use os sinais de cancelamento nos adaptadores: uma chamada externa que ignore o sinal pode continuar pendente. OZY não é um sandbox de segurança.
 
@@ -31,6 +35,8 @@ O prazo do núcleo limita a espera pelo vetorizador. Uma inferência ONNX já em
 `src/engine.mjs`: instâncias independentes, validação, cache, decisões e correções.
 
 `src/runtime/`: motor ONNX e download com checksums, extraídos e renomeados para OZY.
+
+`src/typed.mjs`: validação e normalização das perguntas tipadas; `src/backends.mjs`: adaptadores do Laya e do Jev.
 
 `src/agent.mjs`: orquestração por adaptadores; `src/cli.mjs`: interface de terminal.
 

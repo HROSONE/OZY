@@ -1,0 +1,20 @@
+{
+  "setor": {
+    "type": "choice",
+    "instructions": "Qual setor deve atender esta mensagem?",
+    "criteria": {
+      "cobranca": "faturas, pagamentos, reembolsos",
+      "suporte": "erros, falhas, algo que não funciona",
+      "outro": "qualquer outro assunto"
+    }
+  },
+  "urgencia": {
+    "type": "score",
+    "instructions": "Quão urgente é atender?",
+    "criteria": ["pode esperar", "precisa de resposta hoje", "urgente, algo parado"]
+  },
+  "cancelar": {
+    "type": "noul",
+    "instructions": "A pessoa ameaça cancelar ou ir embora?"
+  }
+}

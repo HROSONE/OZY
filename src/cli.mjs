@@ -2,20 +2,25 @@
 import { readFile, appendFile } from 'node:fs/promises';
 import { OZY } from './index.mjs';
 import { createLocalEmbedder } from './runtime/adapter.mjs';
+import { createJevBackend, createLayaBackend } from './backends.mjs';
 const [command,...args]=process.argv.slice(2);
 const print=value=>console.log(JSON.stringify(value,null,2));
 try {
   if (!command || ['help','--help','-h'].includes(command)) {
-    console.log(`OZY 0.1.0 — decisor local para PC
+    console.log(`OZY 0.2.0 — decisor local para PC
 Uso:
   npm run model:download                  Baixar/verificar modelo base (não treina)
   npm start -- decide "abre a calculadora" Decidir e devolver JSON; não executa
   npm start -- risk "Esvaziar lixeira"      Avaliar risco
   npm run smoke:model                     Conferir inferência real
   npm run calibrate -- caminho.jsonl       Avaliar exemplos rotulados
+  npm start -- evaluate "texto" perguntas.json [--laya PASTA]
+                                          Perguntas tipadas (noul/choice/score), formato Jev/Laya
   npm start -- record arquivo.jsonl '{"collection":"commands","text":"abra o editor","label":"abrir"}'
 
 OZY_MODELS_DIR: diretório dos pesos; OZY_OFFLINE=1: proibir download.
+OZY_LAYA_DIR (ou --laya): pasta do Laya exportado em ONNX, com laya-ts instalado — roda no PC.
+OZY_JEV_API_KEY: usa o Jev da TypeSafe — o texto SAI do computador; só com consentimento.
 Os dados gravados são locais. Nenhum treinamento é iniciado automaticamente.`);
   } else if (command === 'download') {
     const {garantirAssetsEmbeddingsLocais}=await import('./runtime/assets.mjs');
@@ -26,6 +31,21 @@ Os dados gravados são locais. Nenhum treinamento é iniciado automaticamente.`)
     if(!row || !['collection','text','label'].every(key=>typeof row[key]==='string' && row[key].trim())) throw new Error('Registro inválido.');
     await appendFile(args[0],JSON.stringify({collection:row.collection,text:row.text,label:row.label})+'\n',{mode:0o600});
     print({status:'recorded',trained:false});
+  } else if(command === 'evaluate') {
+    const indice=args.indexOf('--laya');
+    const layaDir=indice>=0 ? args[indice+1] : process.env.OZY_LAYA_DIR;
+    const resto=indice>=0 ? args.filter((_,i)=>i!==indice && i!==indice+1) : args;
+    if(resto.length!==2) throw new Error('Use evaluate "texto" perguntas.json [--laya PASTA]');
+    const questions=JSON.parse(await readFile(resto[1],'utf8'));
+    let backend;
+    if(layaDir) backend=createLayaBackend({modelDir:layaDir});
+    else if(process.env.OZY_JEV_API_KEY) {
+      console.error('Aviso: usando o Jev (TypeSafe) — o texto vai para a nuvem.');
+      backend=createJevBackend({apiKey:process.env.OZY_JEV_API_KEY});
+    }
+    const ozy=new OZY({embed:createLocalEmbedder(),timeoutMs:3000,backend,backendTimeoutMs:30000});
+    if(Object.values(questions).some(q=>q?.collection)) await ozy.prepare();
+    print(await ozy.evaluate(resto[0],questions));
   } else if(['decide','risk','smoke','calibrate'].includes(command)) {
     const embed=createLocalEmbedder();
     if(command==='smoke') {

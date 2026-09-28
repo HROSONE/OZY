@@ -1,6 +1,6 @@
 {
   "name": "@hrosone/ozy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Decisor local para agentes de PC, derivado do núcleo JEV local do OSONE.",
   "type": "module",
   "private": true,

@@ -4,3 +4,5 @@ export { PERGUNTAS_DO_TURNO, LIMIAR } from './questions.mjs';
 export { candidatoAComando, EXEMPLOS_DO_COMANDO } from './commands.mjs';
 export { EXEMPLOS_DAS_FAMILIAS, EXEMPLOS_DE_RISCO } from './collections.mjs';
 export { runAgent } from './agent.mjs';
+export { createLayaBackend, createJevBackend } from './backends.mjs';
+export { validarPerguntas as validateQuestions } from './typed.mjs';
